@@ -82,4 +82,3 @@ MIT License - Feel free to modify and distribute!
 
 **Happy Streaming!** 🎮📺  
 *If you enjoy this bot, consider starring the repo!*
-```
