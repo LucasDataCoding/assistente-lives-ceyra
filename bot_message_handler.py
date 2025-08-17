@@ -5,12 +5,17 @@ import configparser
 import json
 from pathlib import Path
 
+# TODO
+# Remove initial car
+#   Add rule to only create one car per user
+#   Create power ups to be picked on the ground
+#       to allow players to fight eachother
 
 # Load configuration from .config file
 config = configparser.ConfigParser()
 config.read(os.path.join(os.path.dirname(__file__), '..', '.config'))
 
-from unity_integration import spawn_car
+from unity_integration import spawn_car, move_car, spawned_cars
 
 class ChatBot(commands.Bot):
     def __init__(self):
@@ -114,13 +119,69 @@ class ChatBot(commands.Bot):
     @commands.command()
     async def spawn(self, ctx):
         try:
-            spawn_car(ctx.author.name.lower)
+            spawn_car(ctx.author.name.lower())
         
             self.set_count_command(ctx, 'spawn')
         
             print("✅ Mensagem de teste enviada")
         except Exception as e:
             print(f"❌ Falha no teste: {e}")
+
+    @commands.command()
+    async def forward(self, ctx):
+        player_name = ctx.author.name.lower()
+
+        try:
+            if player_name in spawned_cars.values():
+                car_id = next(key for key, value in spawned_cars.items() if value == player_name)
+                print(f"Found user Car: {car_id}")
+                move_car(car_id, "forward", 5)  # Usa o ID do carro, não o nome!
+            else:
+                print(f"❌ {player_name} não tem um carro spawnado.")
+        except Exception as e:
+            print(f"❌ Fail on move forward: {e}")
+
+    @commands.command()
+    async def back(self, ctx):
+        player_name = ctx.author.name.lower()
+        
+        try:
+            if player_name in spawned_cars.values():
+                car_id = next(key for key, value in spawned_cars.items() if value == player_name)
+                print(f"Found user Car: {car_id}")
+                move_car(car_id, "back", 5)  # Movimento de ré por 5 segundos
+            else:
+                print(f"❌ {player_name} não tem um carro spawnado.")
+        except Exception as e:
+            print(f"❌ Fail on move back: {e}")
+
+    @commands.command()
+    async def left(self, ctx):
+        player_name = ctx.author.name.lower()
+        
+        try:
+            if player_name in spawned_cars.values():
+                car_id = next(key for key, value in spawned_cars.items() if value == player_name)
+                print(f"Found user Car: {car_id}")
+                move_car(car_id, "left", 3)  # Virar à esquerda por 3 segundos
+            else:
+                print(f"❌ {player_name} não tem um carro spawnado.")
+        except Exception as e:
+            print(f"❌ Fail on turn left: {e}")
+
+    @commands.command()
+    async def right(self, ctx):
+        player_name = ctx.author.name.lower()
+        
+        try:
+            if player_name in spawned_cars.values():
+                car_id = next(key for key, value in spawned_cars.items() if value == player_name)
+                print(f"Found user Car: {car_id}")
+                move_car(car_id, "right", 3)  # Virar à direita por 3 segundos
+            else:
+                print(f"❌ {player_name} não tem um carro spawnado.")
+        except Exception as e:
+            print(f"❌ Fail on turn right: {e}")
 
     @commands.command()
     async def spawncount(self, ctx: commands.Context):
