@@ -9,13 +9,13 @@ from pathlib import Path
 config = configparser.ConfigParser()
 config.read(os.path.join(os.path.dirname(__file__), '..', '.config'))
 
-class KalinnBot(commands.Bot):
+class ChatBot(commands.Bot):
     def __init__(self):
         super().__init__(
             token=config['CHAT']['CHAT_TOKEN'],
-            nick='kalinnbot',  # Explicit bot username
+            nick=config['CHAT']['BOT_USERNAME'],  # Explicit bot username
             prefix=config['CHAT']['PREFIX'],
-            initial_channels=['lucasdatacoding']  # Direct channel reference
+            initial_channels=[config['CHAT']['CHANNEL']]  # Direct channel reference
         )
         self.counter_file = Path(__file__).parent / 'hellocounter.json'
         self.hello_count = self.load_counter()
@@ -39,7 +39,7 @@ class KalinnBot(commands.Bot):
             print(f"Error saving counter: {e}")
 
     async def event_ready(self):
-        print(f'🎉 KalinnBot connected as {self.nick}')
+        print(f'🎉 Bot connected as {self.nick}')
         print(f'📊 Loaded counters: {len(self.hello_count)} users')
 
     async def event_message(self, message):
@@ -83,9 +83,9 @@ class KalinnBot(commands.Bot):
         await ctx.send(message)
 
     @commands.command()
-    async def kalinn(self, ctx: commands.Context):
+    async def bot(self, ctx: commands.Context):
         """Bot info command"""
-        await ctx.send("🤖 I'm KalinnBot! Commands available: !hello, !hellocount, !tophello and !kalinn.")
+        await ctx.send("🤖 Hello! Commands available: !hello, !hellocount, !tophello and !bot.")
     
     @commands.command()
     async def test(self, ctx):
@@ -96,7 +96,7 @@ class KalinnBot(commands.Bot):
             print(f"❌ Falha no teste: {e}")
 
 async def main():
-    bot = KalinnBot()
+    bot = ChatBot()
     await bot.start()
 
 if __name__ == "__main__":
