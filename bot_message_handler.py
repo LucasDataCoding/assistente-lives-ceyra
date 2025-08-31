@@ -100,7 +100,7 @@ class ChatBot(commands.Bot):
 
     @commands.command()
     async def bot(self, ctx: commands.Context):
-        await ctx.send("🤖 Hello, commands available: !bot, !github, !botcode and !chatcode")
+        await ctx.send("🤖 Hello, commands available: !bot, !github, !botcode and !chatcode, !chatvuecode")
     
     @commands.command()
     async def github(self, ctx: commands.Context):
@@ -117,6 +117,10 @@ class ChatBot(commands.Bot):
     @commands.command()
     async def chatcode(self, ctx: commands.Context):
         await ctx.send("https://github.com/LucasDataCoding/twitch-tv-chat-steroids")
+    
+    @commands.command()
+    async def chatvuecode(self, ctx: commands.Context):
+        await ctx.send("https://github.com/LucasDataCoding/twitch-chat-bash-theme")
 
 async def main():
     # Iniciar Flask em uma thread separada
