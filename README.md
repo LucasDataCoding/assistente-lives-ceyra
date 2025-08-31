@@ -2,7 +2,7 @@
 
 ![Logo do Assistente de Lives Ceyra](dist/favicon.ico)
 
-Um bot de chat personalizável para Twitch que rastreia o uso de comandos e persiste dados em formato JSON. Perfeito para streamers que querem engajar com sua audiência!
+Um bot de chat personalizável para Twitch com bot pré configurado. Perfeito para streamers que querem engajar com sua audiência!
 
 ## Guia de Configuração 🛠️
 
