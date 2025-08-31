@@ -1,84 +1,73 @@
-# Twitch Chat Bot 🤖
+# Assistente de Lives Ceyra
 
-A customizable Twitch chat bot that tracks command usage and persists data in JSON format. Perfect for streamers who want to engage with their audience!
+![Logo do Assistente de Lives Ceyra](dist/favicon.ico)
 
-## Features ✨
-- Tracks command usage (e.g., `!hello`) with user-specific counters
-- Persists data between sessions using `hellocounter.json`
-- Customizable prefix and channels
-- Built with Python using `twitchio` library
+Um bot de chat personalizável para Twitch que rastreia o uso de comandos e persiste dados em formato JSON. Perfeito para streamers que querem engajar com sua audiência!
 
-## Setup Guide 🛠️
+## Guia de Configuração 🛠️
 
-### 1. Prerequisites
-- Python 3.8+
-- Twitch account (for bot)
-- [Twitch OAuth Token](https://twitchtokengenerator.com)
+### 1. Pré-requisitos
+- 1.1 Python 3.8 ou superior
+- 1.2 Conta na Twitch (para o bot)
+- 1.3 [Token de Acesso do Bot](https://twitchtokengenerator.com)
 
-### 2. Configuration
-Create/modify `.config` file in the root directory:
+### 2. Configuração
+Crie ou modifique o arquivo `.config` na pasta fora do diretório do projeto:
 
 ```ini
 [CHAT]
-CHAT_TOKEN = oauth:YOUR_BOT_TOKEN_HERE
-CHANNELS = [YOUR_CHANNEL_NAME_LOWERCASE_HERE]
+CHAT_TOKEN = oauth:SEU_TOKEN_DO_BOT_AQUI
+CHANNELS = [SEU_CANAL_EM_MINUSCULO_AQUI]
 PREFIX = !
-BOT_USERNAME = YOUR_BOT_NAME_HERE
-CLIENT_ID = OPTIONAL_YOUR_CLIENT_ID_HERE  # Only needed for advanced features
+BOT_USERNAME = SEU_NOME_DO_BOT_AQUI
+CLIENT_ID = OPCIONAL_SEU_CLIENT_ID_AQUI  # Apenas para funcionalidades avançadas
 ```
 
-**How to get these values:**
-- `CHAT_TOKEN`: Generate at [Twitch Token Generator](https://twitchtokengenerator.com) (select "Bot Chat Token")
-- `CHANNELS`: Your Twitch channel name in lowercase (e.g., `["lucasdatacoding"]`)
-- `BOT_USERNAME`: Your bot account's username
-- `CLIENT_ID`: Only needed if using Twitch API features (get from [Twitch Developer Console](https://dev.twitch.tv/console))
+**Como obter esses valores:**
+- `CHAT_TOKEN`: Gere em [Twitch Token Generator](https://twitchtokengenerator.com) (selecione "Bot Chat Token")
+- `CHANNELS`: Seu nome de canal da Twitch em minúsculo (ex: `["lucasdatacoding"]`)
+- `BOT_USERNAME`: Nome de usuário da conta do bot
 
-### 3. Installation
-```bash
-# Clone the repository
-git clone https://github.com/your-repo/twitch-bot.git
-cd twitch-bot
+### 3. Instalação ✨
 
-# Install dependencies
+## Instalação
+- 1.1 Baixe este projeto [Clicando Aqui](https://github.com/LucasDataCoding/assistente-lives-ceyra/archive/refs/heads/main.zip)
+- 1.2 Extraia os arquivos zipados do passo 1.1
+- 1.3 Baixe o Python [Clicando Aqui](https://www.python.org/downloads/)
+
+# Instale as dependências
 pip install -r requirements.txt
+
+## Executando o Bot 🚀
+Dentro do projeto, abra o terminal e execute:
 ```
-
-### 4. Available Commands
-| Command | Description |
-|---------|-------------|
-| `!hello` | Greets user and shows usage count |
-| `!hellocount` | Shows your personal hello count |
-| `!tophello` | Shows top 5 hello users |
-
-## Running the Bot 🚀
-```bash
 python bot.py
+ou
+py bot.py
+ou 
+python3 bot.py
 ```
 
-## Customization 🎨
-### Add new commands:
-Edit `bot.py` and add new command handlers:
+## Personalização 🎨
+### Adicionar novos comandos:
+Edite `bot.py` e adicione novos manipuladores de comandos:
 ```python
 @commands.command()
-async def yourcommand(self, ctx: commands.Context):
-    await ctx.send("Your custom response!")
+async def seucomando(self, ctx: commands.Context):
+    await ctx.send("Sua resposta personalizada!")
 ```
 
-### Modify persistence:
-- Data is saved in `hellocounter.json`
-- Modify `load_counter()` and `save_counter()` methods to change storage format
+## Solução de Problemas 🔧
+| Problema | Solução |
+|----------|---------|
+| Bot conecta mas não responde | Verifique se o token tem permissões `chat:read` e `chat:write` |
+| "Falha na autenticação de login" | Gere um novo token OAuth |
+| Comandos funcionam mas nenhuma mensagem é enviada | Adicione o bot como moderador: `/mod NOME_DO_SEU_BOT` |
 
-## Troubleshooting 🔧
-| Issue | Solution |
-|-------|----------|
-| Bot connects but doesn't respond | Check token permissions have `chat:read` and `chat:write` |
-| "Login authentication failed" | Generate new OAuth token |
-| Commands work but no messages sent | Add bot as moderator: `/mod YOUR_BOT_NAME` |
-
-## License 📄
-MIT License - Feel free to modify and distribute!
+## Licença 📄
+Licença MIT - Sinta-se livre para modificar e distribuir!
 
 ---
 
-**Happy Streaming!** 🎮📺  
-*If you enjoy this bot, consider starring the repo!*
+**Boas Lives!** 🎮📺  
+*Se você gostou deste bot, considere dar uma estrela no repositório!*
