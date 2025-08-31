@@ -4,28 +4,63 @@ import os
 import configparser
 import json
 import websockets
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, request
 import threading
+import mimetypes
 
 # Load configuration from .config file
 config = configparser.ConfigParser()
 config.read(os.path.join(os.path.dirname(__file__), '..', '.config'))
 app = Flask(__name__)
 
-# Configuração para servir arquivos estáticos
-app.static_folder = 'dist/assets'
-app.static_url_path = '/assets'
+# Configura MIME types manualmente
+mimetypes.add_type('application/javascript', '.js')
+mimetypes.add_type('text/css', '.css')
+mimetypes.add_type('application/json', '.json')
+mimetypes.add_type('image/svg+xml', '.svg')
 
 @app.route('/')
 def serve_vue_app():
     return send_from_directory('dist', 'index.html')
 
+@app.route('/assets/<path:path>')
+def serve_assets(path):
+    """Serve arquivos da pasta assets com MIME types corretos"""
+    response = send_from_directory('dist/assets', path)
+    
+    # Define MIME types corretos
+    if path.endswith('.js'):
+        response.headers.set('Content-Type', 'application/javascript')
+    elif path.endswith('.css'):
+        response.headers.set('Content-Type', 'text/css')
+    elif path.endswith('.json'):
+        response.headers.set('Content-Type', 'application/json')
+    
+    return response
+
 @app.route('/<path:path>')
 def serve_static(path):
-    # Serve outros arquivos estáticos (JS, CSS, imagens)
-    if os.path.exists(f'dist/{path}') and os.path.isfile(f'dist/{path}'):
-        return send_from_directory('dist', path)
-    # Para rotas do Vue Router (HTML5 History Mode)
+    """Serve outros arquivos estáticos"""
+    static_extensions = ['.js', '.css', '.json', '.ico', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.woff', '.woff2', '.ttf', '.eot']
+    
+    # Verifica se é um arquivo estático
+    if any(path.endswith(ext) for ext in static_extensions):
+        if os.path.exists(f'dist/{path}'):
+            response = send_from_directory('dist', path)
+            
+            # Define MIME types
+            if path.endswith('.js'):
+                response.headers.set('Content-Type', 'application/javascript')
+            elif path.endswith('.css'):
+                response.headers.set('Content-Type', 'text/css')
+            elif path.endswith('.json'):
+                response.headers.set('Content-Type', 'application/json')
+            elif path.endswith('.ico'):
+                response.headers.set('Content-Type', 'image/x-icon')
+            
+            return response
+    
+    # Para todas as outras rotas, serve index.html (Vue Router)
     return send_from_directory('dist', 'index.html')
 
 def run_flask():
@@ -35,11 +70,12 @@ def run_flask():
 
 class ChatBot(commands.Bot):
     def __init__(self):
+        # Use get() com fallback para evitar erros se o arquivo não existir
         super().__init__(
-            token=config['CHAT']['CHAT_TOKEN'],
-            nick=config['CHAT']['BOT_USERNAME'],
-            prefix=config['CHAT']['PREFIX'],
-            initial_channels=[config['CHAT']['CHANNEL']]
+            token=config.get('CHAT', 'CHAT_TOKEN', fallback='oauth:YOUR_BOT_TOKEN_HERE'),
+            nick=config.get('CHAT', 'BOT_USERNAME', fallback='YOUR_BOT_NAME_HERE'),
+            prefix=config.get('CHAT', 'PREFIX', fallback='!'),
+            initial_channels=[config.get('CHAT', 'CHANNEL', fallback='YOUR_CHANNEL_NAME_LOWERCASE_HERE')]
         )
         self.websocket_clients = set()
         self.websocket_server = None
