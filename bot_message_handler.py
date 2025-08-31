@@ -4,10 +4,34 @@ import os
 import configparser
 import json
 import websockets
+from flask import Flask, send_from_directory
+import threading
 
 # Load configuration from .config file
 config = configparser.ConfigParser()
 config.read(os.path.join(os.path.dirname(__file__), '..', '.config'))
+app = Flask(__name__)
+
+# Configuração para servir arquivos estáticos
+app.static_folder = 'dist/assets'
+app.static_url_path = '/assets'
+
+@app.route('/')
+def serve_vue_app():
+    return send_from_directory('dist', 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    # Serve outros arquivos estáticos (JS, CSS, imagens)
+    if os.path.exists(f'dist/{path}') and os.path.isfile(f'dist/{path}'):
+        return send_from_directory('dist', path)
+    # Para rotas do Vue Router (HTML5 History Mode)
+    return send_from_directory('dist', 'index.html')
+
+def run_flask():
+    """Executa o servidor Flask em uma thread separada"""
+    print("🚀 Iniciando servidor Flask na porta 5000...")
+    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
 
 class ChatBot(commands.Bot):
     def __init__(self):
@@ -15,9 +39,8 @@ class ChatBot(commands.Bot):
             token=config['CHAT']['CHAT_TOKEN'],
             nick=config['CHAT']['BOT_USERNAME'],
             prefix=config['CHAT']['PREFIX'],
-            initial_channels=[config['CHAT']['CHANNEL']]  # Direct channel reference
+            initial_channels=[config['CHAT']['CHANNEL']]
         )
-
         self.websocket_clients = set()
         self.websocket_server = None
 
@@ -28,17 +51,14 @@ class ChatBot(commands.Bot):
             print(f"👤 Cliente Vue.js conectado. Total: {len(self.websocket_clients)}")
             
             try:
-                # Manter a conexão aberta
                 async for message in websocket:
-                    # Você pode processar mensagens do Vue aqui se necessário
+                    # Processar mensagens do Vue aqui se necessário
                     pass
             except websockets.exceptions.ConnectionClosed:
                 print("👤 Cliente Vue.js desconectado")
             finally:
                 self.websocket_clients.remove(websocket)
-                print(f"👤 Cliente removido. Total: {len(self.websocket_clients)}")
 
-        # Iniciar servidor WebSocket na porta 8765
         self.websocket_server = await websockets.serve(
             websocket_handler, 
             "localhost", 
@@ -52,29 +72,20 @@ class ChatBot(commands.Bot):
             return
 
         message = json.dumps(data)
-        tasks = []
-        
-        for client in self.websocket_clients:
+        for client in self.websocket_clients.copy():
             try:
-                tasks.append(client.send(message))
+                await client.send(message)
             except:
-                # Remove clientes inválidos
                 self.websocket_clients.discard(client)
-        
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def event_ready(self):
         print(f'🎉 Bot connected as {self.nick}')
-        
-        # Iniciar servidor WebSocket quando o bot estiver pronto
         await self.start_websocket_server()
 
     async def event_message(self, message):
         if message.echo:
             return
         
-        # Enviar dados para o Vue.js
         data = {
             'channel': message.channel.name,
             'username': message.author.name,
@@ -84,40 +95,42 @@ class ChatBot(commands.Bot):
             'type': 'chat_message'
         }
         
-        # Broadcast para todos os clientes Vue
         await self.broadcast_to_vue(data)
         await self.handle_commands(message)
 
     @commands.command()
     async def bot(self, ctx: commands.Context):
-        """Bot info commands"""
         await ctx.send("🤖 Hello, commands available: !bot, !github, !botcode and !chatcode")
     
     @commands.command()
     async def github(self, ctx: commands.Context):
-        """GitHub link"""
         await ctx.send("https://github.com/LucasDataCoding")
         
     @commands.command()
     async def botcode(self, ctx: commands.Context):
-        """Bot source code"""
         await ctx.send("https://github.com/LucasDataCoding/twitch-tv-chat-steroids")
     
     @commands.command()
+    async def youtube(self, ctx: commands.Context):
+        await ctx.send("https://www.youtube.com/@lucas-data-code")
+
+    @commands.command()
     async def chatcode(self, ctx: commands.Context):
-        """Bot source code"""
-        await ctx.send("https://github.com/LucasDataCoding/twitch-chat-bash-theme")
-    
+        await ctx.send("https://github.com/LucasDataCoding/twitch-tv-chat-steroids")
+
 async def main():
+    # Iniciar Flask em uma thread separada
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    
+    # Iniciar o bot Twitch
     bot = ChatBot()
     try:
         await bot.start()
     except KeyboardInterrupt:
         print("\n🛑 Desligando bot...")
-        await bot.close()
     except Exception as e:
         print(f"❌ Erro: {e}")
-        await bot.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
