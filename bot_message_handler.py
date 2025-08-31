@@ -74,12 +74,11 @@ class ChatBot(commands.Bot):
         if message.echo:
             return
         
-        print(f'💬 #{message.channel.name} {message.author.name}: {message.content}')
-        
         # Enviar dados para o Vue.js
         data = {
             'channel': message.channel.name,
             'username': message.author.name,
+            'message_color': message.author.color,
             'message': message.content,
             'timestamp': str(getattr(message, 'timestamp', '')),
             'type': 'chat_message'
