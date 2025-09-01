@@ -1,9 +1,3 @@
-Claro! Vou adicionar uma seção dedicada para o vídeo de forma destaca e profissional no seu README. O ideal é colocá-lo bem no início, após uma breve introdução, para que os visitantes possam ver imediatamente uma demonstração do projeto em ação.
-
-Aqui está a sugestão para a nova seção:
-
----
-
 # Assistente de Lives Ceyra
 
 ![Logo do Assistente de Lives Ceyra](dist/favicon.ico)
