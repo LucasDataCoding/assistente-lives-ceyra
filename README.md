@@ -1,8 +1,25 @@
+Claro! Vou adicionar uma seção dedicada para o vídeo de forma destaca e profissional no seu README. O ideal é colocá-lo bem no início, após uma breve introdução, para que os visitantes possam ver imediatamente uma demonstração do projeto em ação.
+
+Aqui está a sugestão para a nova seção:
+
+---
+
 # Assistente de Lives Ceyra
 
 ![Logo do Assistente de Lives Ceyra](dist/favicon.ico)
 
 Um bot de chat personalizável para Twitch com bot pré configurado. Perfeito para streamers que querem engajar com sua audiência!
+
+## 🎥 Vídeo de Demonstração e Tutorial
+
+Veja a Ceyra em ação! Este vídeo mostra uma demonstração completa das funcionalidades e um tutorial passo a passo de como configurar:
+
+[![Assistente de Lives Ceyra - Previa do Projeto](https://img.youtube.com/vi/Nh6BBR-D8LI/maxresdefault.jpg)](https://www.youtube.com/watch?v=Nh6BBR-D8LI)
+
+**O que você vai aprender no vídeo:**
+- Demonstração dos comandos personalizáveis 
+- Como usar os recursos de automação do chat
+- Dicas para personalizar a Ceyra para sua stream
 
 ## Guia de Configuração 🛠️
 
