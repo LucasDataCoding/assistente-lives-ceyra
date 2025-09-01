@@ -1,5 +1,5 @@
 # Assistente de Lives Ceyra
-Veja a Ceyra em ação! Este vídeo mostra uma demonstração completa das funcionalidades e um tutorial passo a passo de como configurar:
+Veja a Ceyra em ação! Um bot de chat personalizável para Twitch com bot pré configurado. Perfeito para streamers que querem engajar com sua audiência! Este vídeo mostra uma demonstração completa das funcionalidades:
 
 [![Assistente de Lives Ceyra - Previa do Projeto](https://img.youtube.com/vi/Nh6BBR-D8LI/maxresdefault.jpg)](https://www.youtube.com/watch?v=Nh6BBR-D8LI)
 
