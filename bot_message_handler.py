@@ -58,7 +58,7 @@ def serve_static(path):
             elif path.endswith('.ico'):
                 response.headers.set('Content-Type', 'image/x-icon')
             
-            return response
+            return response 
     
     # Para todas as outras rotas, serve index.html (Vue Router)
     return send_from_directory('dist', 'index.html')
