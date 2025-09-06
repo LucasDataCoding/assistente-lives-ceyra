@@ -136,7 +136,7 @@ class ChatBot(commands.Bot):
 
     @commands.command()
     async def bot(self, ctx: commands.Context):
-        await ctx.send("🤖 Hello, commands available: !bot, !github, !botcode and !chatcode, !chatvuecode")
+        await ctx.send("🤖 Comandos disponíveis: !bot, !github, !botcode and !chatcode, !chatvuecode")
     
     @commands.command()
     async def github(self, ctx: commands.Context):
@@ -148,7 +148,7 @@ class ChatBot(commands.Bot):
     
     @commands.command()
     async def youtube(self, ctx: commands.Context):
-        await ctx.send("https://www.youtube.com/@lucas-data-code")
+        await ctx.send("https://www.youtube.com/@lucas-data-coding")
 
     @commands.command()
     async def chatcode(self, ctx: commands.Context):
