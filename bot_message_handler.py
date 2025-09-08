@@ -4,20 +4,42 @@ import os
 import configparser
 import json
 import websockets
-from flask import Flask, send_from_directory, request
+from flask import Flask, send_from_directory, request, jsonify
 import threading
 import mimetypes
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+from flask_cors import CORS
 
 # Load configuration from .config file
 config = configparser.ConfigParser()
 config.read(os.path.join(os.path.dirname(__file__), '..', '.config'))
 app = Flask(__name__)
 
+# Configure CORS para permitir requisições do frontend
+CORS(app, origins=["http://localhost:5000", "http://localhost:5173", "http://127.0.0.1:5000", "http://127.0.0.1:5173"])
+
 # Configura MIME types manualmente
 mimetypes.add_type('application/javascript', '.js')
 mimetypes.add_type('text/css', '.css')
 mimetypes.add_type('application/json', '.json')
 mimetypes.add_type('image/svg+xml', '.svg')
+
+# Configurações globais
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'configs.json')
+
+# Variável global para o bot (vamos acessá-la no event handler)
+global_bot = None
+
+class ConfigFileHandler(FileSystemEventHandler):
+    """Monitora mudanças no arquivo de configuração"""
+    
+    def on_modified(self, event):
+        if event.src_path == CONFIG_FILE:
+            print("📁 Arquivo de configuração modificado")
+            # Usamos call_soon_threadsafe para executar no event loop correto
+            if global_bot:
+                asyncio.run_coroutine_threadsafe(global_bot.broadcast_config_update(), global_bot.loop)
 
 @app.route('/')
 def serve_vue_app():
@@ -63,6 +85,46 @@ def serve_static(path):
     # Para todas as outras rotas, serve index.html (Vue Router)
     return send_from_directory('dist', 'index.html')
 
+# Rota para OBTER configurações
+@app.route('/api/configs', methods=['GET'])
+def get_configs():
+    try:
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            config_data = json.load(f)
+        return jsonify(config_data)
+    except FileNotFoundError:
+        # Retorna configurações padrão se o arquivo não existir
+        default_config = {
+            "theme": "default",
+            "settings": {},
+            "chat": {
+                "show_timestamps": True,
+                "show_badges": True
+            }
+        }
+        return jsonify(default_config)
+    except Exception as e:
+        return jsonify({"error": f"Erro ao ler configurações: {str(e)}"}), 500
+
+# Rota para SALVAR configurações
+@app.route('/api/configs', methods=['POST'])
+def save_configs():
+    try:
+        new_configs = request.get_json()
+        
+        if not new_configs:
+            return jsonify({"error": "Dados de configuração não fornecidos"}), 400
+        
+        # Salva no arquivo
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(new_configs, f, indent=2, ensure_ascii=False)
+        
+        print("✅ Configurações salvas com sucesso")
+        return jsonify({"message": "Configurações salvas com sucesso", "configs": new_configs})
+    
+    except Exception as e:
+        return jsonify({"error": f"Erro ao salvar configurações: {str(e)}"}), 500
+
 def run_flask():
     """Executa o servidor Flask em uma thread separada"""
     print("🚀 Iniciando servidor Flask na porta 5000...")
@@ -70,7 +132,6 @@ def run_flask():
 
 class ChatBot(commands.Bot):
     def __init__(self):
-        # Use get() com fallback para evitar erros se o arquivo não existir
         super().__init__(
             token=config.get('CHAT', 'CHAT_TOKEN', fallback='oauth:YOUR_BOT_TOKEN_HERE'),
             nick=config.get('CHAT', 'BOT_USERNAME', fallback='YOUR_BOT_NAME_HERE'),
@@ -79,6 +140,8 @@ class ChatBot(commands.Bot):
         )
         self.websocket_clients = set()
         self.websocket_server = None
+        self.file_observer = None
+        self.loop = asyncio.get_event_loop()
 
     async def start_websocket_server(self):
         """Inicia o servidor WebSocket para comunicação com Vue.js"""
@@ -87,9 +150,36 @@ class ChatBot(commands.Bot):
             print(f"👤 Cliente Vue.js conectado. Total: {len(self.websocket_clients)}")
             
             try:
+                # Envia as configurações atuais para o novo cliente
+                try:
+                    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                        current_config = json.load(f)
+                    await websocket.send(json.dumps({
+                        'type': 'config_update',
+                        'configs': current_config
+                    }))
+                    print("📤 Configurações iniciais enviadas para novo cliente")
+                except Exception as e:
+                    print(f"❌ Erro ao enviar configurações iniciais: {e}")
+                
                 async for message in websocket:
                     # Processar mensagens do Vue aqui se necessário
-                    pass
+                    try:
+                        data = json.loads(message)
+                        if data.get('type') == 'config_save':
+                            # Salva as configurações via HTTP
+                            import aiohttp
+                            async with aiohttp.ClientSession() as session:
+                                async with session.post(
+                                    'http://localhost:5000/api/configs',
+                                    json=data.get('configs'),
+                                    headers={'Content-Type': 'application/json'}
+                                ) as response:
+                                    if response.status != 200:
+                                        print("❌ Erro ao salvar configurações via WebSocket")
+                    except json.JSONDecodeError:
+                        print("❌ Mensagem WebSocket inválida")
+            
             except websockets.exceptions.ConnectionClosed:
                 print("👤 Cliente Vue.js desconectado")
             finally:
@@ -102,20 +192,52 @@ class ChatBot(commands.Bot):
         )
         print("🚀 Servidor WebSocket iniciado em ws://localhost:8765")
 
+    async def broadcast_config_update(self):
+        """Envia atualização de configurações para todos os clientes"""
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                current_config = json.load(f)
+            
+            message = {
+                'type': 'config_update',
+                'configs': current_config
+            }
+            
+            print(f"📤 Enviando atualização de configurações: {json.dumps(message)}")
+            
+            await self.broadcast_to_vue(message)
+            print("📤 Configurações enviadas para clientes WebSocket")
+        except Exception as e:
+            print(f"❌ Erro ao enviar configurações: {e}")
+
     async def broadcast_to_vue(self, data):
         """Envia dados para todos os clientes Vue.js conectados"""
         if not self.websocket_clients:
+            print("❌ Nenhum cliente WebSocket conectado")
             return
 
         message = json.dumps(data)
+        print(f"👥 Clientes conectados: {len(self.websocket_clients)}")
+        
         for client in self.websocket_clients.copy():
             try:
                 await client.send(message)
-            except:
+                print(f"✅ Mensagem enviada para cliente")
+            except Exception as e:
+                print(f"❌ Erro ao enviar para cliente: {e}")
                 self.websocket_clients.discard(client)
+                
+    def start_file_watcher(self):
+        """Inicia o observador de arquivos"""
+        event_handler = ConfigFileHandler()
+        self.file_observer = Observer()
+        self.file_observer.schedule(event_handler, path=os.path.dirname(CONFIG_FILE), recursive=False)
+        self.file_observer.start()
+        print("👀 Observador de arquivos iniciado")
 
     async def event_ready(self):
         print(f'🎉 Bot connected as {self.nick}')
+        self.start_file_watcher()
         await self.start_websocket_server()
 
     async def event_message(self, message):
@@ -165,10 +287,18 @@ async def main():
     
     # Iniciar o bot Twitch
     bot = ChatBot()
+    
+    # Definir o bot global para o file watcher
+    global global_bot
+    global_bot = bot
+    
     try:
         await bot.start()
     except KeyboardInterrupt:
         print("\n🛑 Desligando bot...")
+        if bot.file_observer:
+            bot.file_observer.stop()
+            bot.file_observer.join()
     except Exception as e:
         print(f"❌ Erro: {e}")
 
