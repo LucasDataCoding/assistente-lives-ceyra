@@ -1,7 +1,6 @@
 import asyncio
 from twitchio.ext import commands
 import os
-import configparser
 import json
 import websockets
 from flask import Flask, send_from_directory, request, jsonify
@@ -10,13 +9,11 @@ import mimetypes
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from flask_cors import CORS
+import time
 
-# Load configuration from .config file
-config = configparser.ConfigParser()
-config.read(os.path.join(os.path.dirname(__file__), '..', '.config'))
 app = Flask(__name__)
 
-# Configure CORS para permitir requisições do frontend
+# Configure CORS
 CORS(app, origins=["http://localhost:5000", "http://localhost:5173", "http://127.0.0.1:5000", "http://127.0.0.1:5173"])
 
 # Configura MIME types manualmente
@@ -28,8 +25,9 @@ mimetypes.add_type('image/svg+xml', '.svg')
 # Configurações globais
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'configs.json')
 
-# Variável global para o bot (vamos acessá-la no event handler)
+# Variável global para o bot
 global_bot = None
+bot_connected = False  # Nova variável para controlar estado do bot
 
 class ConfigFileHandler(FileSystemEventHandler):
     """Monitora mudanças no arquivo de configuração"""
@@ -37,9 +35,32 @@ class ConfigFileHandler(FileSystemEventHandler):
     def on_modified(self, event):
         if event.src_path == CONFIG_FILE:
             print("📁 Arquivo de configuração modificado")
-            # Usamos call_soon_threadsafe para executar no event loop correto
             if global_bot:
                 asyncio.run_coroutine_threadsafe(global_bot.broadcast_config_update(), global_bot.loop)
+
+def load_bot_config():
+    """Carrega as configurações do bot do arquivo configs.json"""
+    try:
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print("❌ Arquivo configs.json não encontrado. Criando padrão...")
+        # Configuração padrão
+        default_config = {
+            "CHAT": {
+                "CHAT_TOKEN": "oauth:YOUR_BOT_TOKEN_HERE",
+                "BOT_USERNAME": "YOUR_BOT_NAME_HERE", 
+                "PREFIX": "!",
+                "CHANNEL": "YOUR_CHANNEL_NAME_LOWERCASE_HERE"
+            }
+        }
+        # Salva o arquivo padrão
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(default_config, f, indent=2, ensure_ascii=False)
+        return default_config
+    except Exception as e:
+        print(f"❌ Erro ao carregar configs.json: {e}")
+        return {}
 
 @app.route('/')
 def serve_vue_app():
@@ -47,30 +68,22 @@ def serve_vue_app():
 
 @app.route('/assets/<path:path>')
 def serve_assets(path):
-    """Serve arquivos da pasta assets com MIME types corretos"""
     response = send_from_directory('dist/assets', path)
-    
-    # Define MIME types corretos
     if path.endswith('.js'):
         response.headers.set('Content-Type', 'application/javascript')
     elif path.endswith('.css'):
         response.headers.set('Content-Type', 'text/css')
     elif path.endswith('.json'):
         response.headers.set('Content-Type', 'application/json')
-    
     return response
 
 @app.route('/<path:path>')
 def serve_static(path):
-    """Serve outros arquivos estáticos"""
     static_extensions = ['.js', '.css', '.json', '.ico', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.woff', '.woff2', '.ttf', '.eot']
     
-    # Verifica se é um arquivo estático
     if any(path.endswith(ext) for ext in static_extensions):
         if os.path.exists(f'dist/{path}'):
             response = send_from_directory('dist', path)
-            
-            # Define MIME types
             if path.endswith('.js'):
                 response.headers.set('Content-Type', 'application/javascript')
             elif path.endswith('.css'):
@@ -79,11 +92,17 @@ def serve_static(path):
                 response.headers.set('Content-Type', 'application/json')
             elif path.endswith('.ico'):
                 response.headers.set('Content-Type', 'image/x-icon')
-            
             return response 
     
-    # Para todas as outras rotas, serve index.html (Vue Router)
     return send_from_directory('dist', 'index.html')
+
+# Rota para verificar status do bot
+@app.route('/api/bot-status', methods=['GET'])
+def get_bot_status():
+    return jsonify({
+        'connected': bot_connected,
+        'message': 'Bot conectado ao Twitch' if bot_connected else 'Bot não conectado - Configure as credenciais'
+    })
 
 # Rota para OBTER configurações
 @app.route('/api/configs', methods=['GET'])
@@ -93,7 +112,6 @@ def get_configs():
             config_data = json.load(f)
         return jsonify(config_data)
     except FileNotFoundError:
-        # Retorna configurações padrão se o arquivo não existir
         default_config = {
             "theme": "default",
             "settings": {},
@@ -115,33 +133,89 @@ def save_configs():
         if not new_configs:
             return jsonify({"error": "Dados de configuração não fornecidos"}), 400
         
-        # Salva no arquivo
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(new_configs, f, indent=2, ensure_ascii=False)
         
         print("✅ Configurações salvas com sucesso")
+        
+        # Se o bot está rodando, reconecta com as novas credenciais
+        if global_bot:
+            asyncio.run_coroutine_threadsafe(global_bot.reconnect_with_new_config(), global_bot.loop)
+            
         return jsonify({"message": "Configurações salvas com sucesso", "configs": new_configs})
     
     except Exception as e:
         return jsonify({"error": f"Erro ao salvar configurações: {str(e)}"}), 500
 
 def run_flask():
-    """Executa o servidor Flask em uma thread separada"""
     print("🚀 Iniciando servidor Flask na porta 5000...")
     app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
 
 class ChatBot(commands.Bot):
     def __init__(self):
+        # Carrega configurações do arquivo JSON
+        bot_config = load_bot_config()
+        chat_config = bot_config.get('CHAT', {})
+        
+        self.token = chat_config.get('CHAT_TOKEN', 'oauth:YOUR_BOT_TOKEN_HERE')
+        self.nickname = chat_config.get('BOT_USERNAME', 'YOUR_BOT_NAME_HERE')
+        self.channel_name = chat_config.get('CHANNEL', 'YOUR_CHANNEL_NAME_LOWERCASE_HERE')
+        
         super().__init__(
-            token=config.get('CHAT', 'CHAT_TOKEN', fallback='oauth:YOUR_BOT_TOKEN_HERE'),
-            nick=config.get('CHAT', 'BOT_USERNAME', fallback='YOUR_BOT_NAME_HERE'),
-            prefix=config.get('CHAT', 'PREFIX', fallback='!'),
-            initial_channels=[config.get('CHAT', 'CHANNEL', fallback='YOUR_CHANNEL_NAME_LOWERCASE_HERE')]
+            token=self.token,
+            nick=self.nickname,
+            prefix=chat_config.get('PREFIX', '!'),
+            initial_channels=[self.channel_name]
         )
         self.websocket_clients = set()
         self.websocket_server = None
         self.file_observer = None
         self.loop = asyncio.get_event_loop()
+        self.should_reconnect = True
+
+    async def safe_connect(self):
+        """Tenta conectar de forma segura, mesmo com credenciais inválidas"""
+        global bot_connected
+        
+        try:
+            # Verifica se as credenciais são padrão
+            if (self.token == 'oauth:YOUR_BOT_TOKEN_HERE' or 
+                self.nickname == 'YOUR_BOT_NAME_HERE' or 
+                self.channel_name == 'YOUR_CHANNEL_NAME_LOWERCASE_HERE'):
+                print("⚠️  Credenciais não configuradas. Servidor rodando em modo de configuração.")
+                bot_connected = False
+                return False
+                
+            print(f"🔗 Tentando conectar ao Twitch como {self.nickname}...")
+            await self.start()
+            bot_connected = True
+            print(f'🎉 Bot conectado como {self.nickname}')
+            return True
+            
+        except Exception as e:
+            print(f"❌ Erro ao conectar ao Twitch: {e}")
+            print("⚠️  Servidor continuará rodando para configuração via interface web")
+            bot_connected = False
+            return False
+
+    async def reconnect_with_new_config(self):
+        """Reconecta com novas configurações"""
+        global bot_connected
+        
+        print("🔄 Reconectando com novas configurações...")
+        self.should_reconnect = False
+        await self.close()
+        
+        # Recarrega configurações
+        bot_config = load_bot_config()
+        chat_config = bot_config.get('CHAT', {})
+        
+        self.token = chat_config.get('CHAT_TOKEN', 'oauth:YOUR_BOT_TOKEN_HERE')
+        self.nickname = chat_config.get('BOT_USERNAME', 'YOUR_BOT_NAME_HERE')
+        self.channel_name = chat_config.get('CHANNEL', 'YOUR_CHANNEL_NAME_LOWERCASE_HERE')
+        
+        self.should_reconnect = True
+        await self.safe_connect()
 
     async def start_websocket_server(self):
         """Inicia o servidor WebSocket para comunicação com Vue.js"""
@@ -150,7 +224,14 @@ class ChatBot(commands.Bot):
             print(f"👤 Cliente Vue.js conectado. Total: {len(self.websocket_clients)}")
             
             try:
-                # Envia as configurações atuais para o novo cliente
+                # Envia status do bot
+                await websocket.send(json.dumps({
+                    'type': 'bot_status',
+                    'connected': bot_connected,
+                    'message': 'Conectado ao Twitch' if bot_connected else 'Aguardando configuração'
+                }))
+                
+                # Envia configurações atuais
                 try:
                     with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                         current_config = json.load(f)
@@ -158,16 +239,13 @@ class ChatBot(commands.Bot):
                         'type': 'config_update',
                         'configs': current_config
                     }))
-                    print("📤 Configurações iniciais enviadas para novo cliente")
                 except Exception as e:
-                    print(f"❌ Erro ao enviar configurações iniciais: {e}")
+                    print(f"❌ Erro ao enviar configurações: {e}")
                 
                 async for message in websocket:
-                    # Processar mensagens do Vue aqui se necessário
                     try:
                         data = json.loads(message)
                         if data.get('type') == 'config_save':
-                            # Salva as configurações via HTTP
                             import aiohttp
                             async with aiohttp.ClientSession() as session:
                                 async with session.post(
@@ -203,28 +281,20 @@ class ChatBot(commands.Bot):
                 'configs': current_config
             }
             
-            print(f"📤 Enviando atualização de configurações: {json.dumps(message)}")
-            
             await self.broadcast_to_vue(message)
-            print("📤 Configurações enviadas para clientes WebSocket")
         except Exception as e:
             print(f"❌ Erro ao enviar configurações: {e}")
 
     async def broadcast_to_vue(self, data):
         """Envia dados para todos os clientes Vue.js conectados"""
         if not self.websocket_clients:
-            print("❌ Nenhum cliente WebSocket conectado")
             return
 
         message = json.dumps(data)
-        print(f"👥 Clientes conectados: {len(self.websocket_clients)}")
-        
         for client in self.websocket_clients.copy():
             try:
                 await client.send(message)
-                print(f"✅ Mensagem enviada para cliente")
             except Exception as e:
-                print(f"❌ Erro ao enviar para cliente: {e}")
                 self.websocket_clients.discard(client)
                 
     def start_file_watcher(self):
@@ -236,11 +306,35 @@ class ChatBot(commands.Bot):
         print("👀 Observador de arquivos iniciado")
 
     async def event_ready(self):
-        print(f'🎉 Bot connected as {self.nick}')
+        """Evento quando o bot se conecta com sucesso"""
+        global bot_connected
+        bot_connected = True
+        print(f'🎉 Bot conectado como {self.nick}')
         self.start_file_watcher()
-        await self.start_websocket_server()
+        await self.start_websocket_server() 
+        
+        # Anuncia status para todos os clientes
+        await self.broadcast_to_vue({
+            'type': 'bot_status',
+            'connected': True,
+            'message': f'Conectado como {self.nick}'
+        })
+
+    async def event_error(self, error):
+        """Evento quando ocorre um erro no bot"""
+        global bot_connected
+        bot_connected = False
+        print(f"❌ Erro no bot: {error}")
+        
+        # Anuncia status de erro para clientes
+        await self.broadcast_to_vue({
+            'type': 'bot_status',
+            'connected': False,
+            'message': f'Erro de conexão: {str(error)}'
+        })
 
     async def event_message(self, message):
+        """Processa mensagens do chat"""
         if message.echo:
             return
         
@@ -253,54 +347,139 @@ class ChatBot(commands.Bot):
             'type': 'chat_message'
         }
         
+        print(f"📨 Mensagem recebida: {message.author.name}: {message.content}")
+        print(f"👥 Clientes WebSocket conectados: {len(self.websocket_clients)}")
+        
         await self.broadcast_to_vue(data)
         await self.handle_commands(message)
 
-    @commands.command()
-    async def bot(self, ctx: commands.Context):
-        await ctx.send("🤖 Comandos disponíveis: !bot, !github, !botcode and !chatcode, !chatvuecode")
-    
-    @commands.command()
-    async def github(self, ctx: commands.Context):
-        await ctx.send("https://github.com/LucasDataCoding")
+    def reload_config(self):
+        """Recarrega as configurações do arquivo"""
+        self.config_data = load_bot_config()
+        return self.config_data
+    @commands.command(name='youtube')
+    async def youtube_command(self, ctx):
+        """Comando !youtube - Mostra o link do YouTube"""
+        config = self.reload_config()
+        youtube_link = config.get('linkYoutube', '')
         
-    @commands.command()
-    async def botcode(self, ctx: commands.Context):
-        await ctx.send("https://github.com/LucasDataCoding/twitch-tv-chat-steroids")
-    
-    @commands.command()
-    async def youtube(self, ctx: commands.Context):
-        await ctx.send("https://www.youtube.com/@lucas-data-coding")
+        if youtube_link:
+            await ctx.send(f"📺 Inscreva-se no nosso YouTube: {youtube_link}")
+        else:
+            await ctx.send("🔗 Link do YouTube não configurado. Use !comandos para ver todos os links.")
 
-    @commands.command()
-    async def chatcode(self, ctx: commands.Context):
-        await ctx.send("https://github.com/LucasDataCoding/twitch-tv-chat-steroids")
-    
-    @commands.command()
-    async def chatvuecode(self, ctx: commands.Context):
-        await ctx.send("https://github.com/LucasDataCoding/twitch-chat-bash-theme")
+
+    @commands.command(name='youtube')
+    async def youtube_command(self, ctx):
+        await ctx.send("🔗 Baixe o projeto para utilizar o tema em: https://github.com/LucasDataCoding/assistente-lives-ceyra. Use !comandos para ver todos os links.")
+
+    @commands.command(name='discord')
+    async def discord_command(self, ctx):
+        """Comando !discord - Mostra o link do Discord"""
+        config = self.reload_config()
+        discord_link = config.get('linkDiscord', '')
+        
+        if discord_link:
+            await ctx.send(f"🎮 Entre no nosso Discord: {discord_link}")
+        else:
+            await ctx.send("🔗 Link do Discord não configurado. Use !comandos para ver todos os links.")
+
+    @commands.command(name='twitch')
+    async def twitch_command(self, ctx):
+        """Comando !twitch - Mostra o link da Twitch"""
+        config = self.reload_config()
+        twitch_link = config.get('linkTwitch', '')
+        
+        if twitch_link:
+            await ctx.send(f"🎥 Siga nossa Twitch: {twitch_link}")
+        else:
+            await ctx.send("🔗 Link da Twitch não configurado. Use !comandos para ver todos os links.")
+
+    @commands.command(name='comandos', aliases=['commands', 'ajuda', 'help'])
+    async def commands_command(self, ctx):
+        """Comando !comandos - Mostra todos os comandos disponíveis"""
+        config = self.reload_config()
+        
+        response = "📋 Comandos disponíveis: "
+        commands_list = []
+        
+        # Verifica cada comando e adiciona se estiver configurado
+        youtube_link = config.get('linkYoutube', '')
+        discord_link = config.get('linkDiscord', '')
+        twitch_link = config.get('linkTwitch', '')
+        
+        if youtube_link:
+            commands_list.append("!youtube")
+        if discord_link:
+            commands_list.append("!discord")
+        if twitch_link:
+            commands_list.append("!twitch")
+        
+        # Adiciona comandos fixos
+        commands_list.extend(["!comandos", "!ajuda"])
+        
+        response += " | ".join(commands_list)
+        
+        # Adiciona informações adicionais se configurado
+        highlight_text = config.get('highlightText', '')
+        if highlight_text:
+            response += f" | {highlight_text}"
+        
+        await ctx.send(response)
+
+    @commands.command(name='configtest')
+    async def config_test_command(self, ctx):
+        """Comando de teste para verificar as configurações carregadas"""
+        config = self.reload_config()
+        
+        # Mostra apenas informações não sensíveis
+        response = "⚙️ Configurações carregadas: "
+        response += f"YouTube: {'✅' if config.get('linkYoutube') else '❌'} | "
+        response += f"Discord: {'✅' if config.get('linkDiscord') else '❌'} | "
+        response += f"Twitch: {'✅' if config.get('linkTwitch') else '❌'}"
+        
+        await ctx.send(response)
+    # ... (comandos existentes)
 
 async def main():
-    # Iniciar Flask em uma thread separada
+    # Inicia Flask em thread separada
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     
-    # Iniciar o bot Twitch
-    bot = ChatBot()
+    # Aguarda o Flask iniciar
+    time.sleep(2)
     
-    # Definir o bot global para o file watcher
+    # Cria e inicia o bot
+    bot = ChatBot()
     global global_bot
     global_bot = bot
     
+    print("🌐 Servidor Flask rodando em http://localhost:5000")
+    print("📋 Acesse http://localhost:5000 para configurar o bot")
+    print("⚡ Iniciando bot Twitch...")
+    
+    # SEMPRE inicia o WebSocket, independente da conexão do bot
+    print("🔌 Iniciando WebSocket...")
+    await bot.start_websocket_server()
+    bot.start_file_watcher()
+    
+    # Tenta conectar o bot (mesmo que falhe, o servidor continua)
+    connection_success = await bot.safe_connect()
+    
+    if connection_success:
+        print("✅ Bot conectado ao Twitch com sucesso")
+    else:
+        print("⚠️  Bot não conectado ao Twitch - Modo configuração")
+    
     try:
-        await bot.start()
+        # Mantém o loop rodando
+        while True:
+            await asyncio.sleep(1)
     except KeyboardInterrupt:
-        print("\n🛑 Desligando bot...")
+        print("\n🛑 Desligando servidor...")
         if bot.file_observer:
             bot.file_observer.stop()
             bot.file_observer.join()
-    except Exception as e:
-        print(f"❌ Erro: {e}")
-
+            
 if __name__ == "__main__":
     asyncio.run(main())
