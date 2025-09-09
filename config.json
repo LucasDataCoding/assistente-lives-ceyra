@@ -1,0 +1,8 @@
+{
+  "CHAT": {
+    "CHAT_TOKEN": "oauth:YOUR_BOT_TOKEN_HERE",
+    "BOT_USERNAME": "YOUR_BOT_NAME_HERE",
+    "PREFIX": "!",
+    "CHANNEL": "YOUR_CHANNEL_NAME_LOWERCASE_HERE"
+  }
+}
