@@ -1,8 +1,14 @@
 {
+  "highlightText": "!hi",
+  "name": "cool text here",
   "theme": {
-    "name": "Open Source",
-    "path": "linux"
+    "name": "Hollow",
+    "path": "hollow1"
   },
-  "name": "lucas@datacoding",
-  "highlightText": "!oiwebsocket"
+  "CHAT": {
+    "CHAT_TOKEN": "oauth:seu_token_aqui",
+    "BOT_USERNAME": "nome_do_seu_bot",
+    "PREFIX": "!",
+    "CHANNEL": "seu_canal"
+  }
 }
